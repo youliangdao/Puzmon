@@ -10,57 +10,47 @@
 /*** 構造体型宣言 ***/
 
 /*** プロトタイプ宣言 ***/
-void goDungeon(char* playerName);
-void doBattle(char* monster);
+int goDungeon(char* playerName);
+int doBattle(char* enemy);
 
 /*** 関数宣言 ***/
 
-/*
-ゲーム開始〜終了までの処理を行う関数
-*/
 int main(int argc, char** argv)
 {
-  if (argc == 1)
+  if (argc != 2)
   {
     printf("エラー：プレイヤー名を指定して起動してください");
-  }
-  else
-  {
-    //タイトル表示
-    printf("*** Puzzle & Monsters ***\n");
-    //ダンジョンに開始〜終了
-    goDungeon(argv[1]);
-    //クリアー表示
-    printf("*** GAME CLEARED! ***\n");
-    //倒したモンスター数の表示
-    printf("倒したモンスター数＝5");
+    return 1;
   }
 
+  printf("*** Puzzle & Monsters ***\n");
+  int winCount = goDungeon(argv[1]);
+  if (winCount == 5){
+    printf("***GAME CLEARED!***\n");
+  } else {
+    printf("***GAME OVER***\n");
+  }
+  printf("倒したモンスター数＝%d", winCount);
   return 0;
 }
 
-/*
-ダンジョン開始〜終了までの処理を行う関数
-*/
-void goDungeon (char* playerName)
-{
-
+int goDungeon(char* playerName){
   printf("%sはダンジョンに到着した\n", playerName);
-  doBattle("スライム");
-  doBattle("ゴブリン");
-  doBattle("オオコウモリ");
-  doBattle("ウェアウルフ");
-  doBattle("ドラゴン");
+
+  int winCount = 0;
+  winCount += doBattle("スライム");
+  winCount += doBattle("ゴブリン");
+  winCount += doBattle("オオコウモリ");
+  winCount += doBattle("ウェアウルフ");
+  winCount += doBattle("ドラゴン");
   printf("%sはダンジョンを制覇した！\n", playerName);
+  return winCount;
 }
 
-/*
-1回のバトル開始〜終了までの処理を行う関数
-*/
-void doBattle (char* monster)
-{
-  printf("%sが現れた！\n", monster);
-  printf("%sを倒した！\n", monster);
+int doBattle(char* enemy){
+  printf("%sが現れた！\n", enemy);
+  printf("%sを倒した！\n", enemy);
+  return 1;
 }
 
 /*** ユーティリティ関数宣言 ***/
