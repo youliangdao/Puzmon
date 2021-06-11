@@ -4,161 +4,102 @@
 #include <stdio.h>
 
 /*** 列挙型宣言 ***/
-typedef enum {
-  FIRE,
-  WATER,
-  WIND,
-  EARTH,
-  LIFE,
-  EMPTY
-} Element;
+//属性を0~5まで割り当てる
+typedef enum {FIRE, WATER, WIND, EARTH, LIFE, EMPTY} Element;
 
 /*** グローバル定数の宣言 ***/
-char ELEMENT_SYMBOLS[6] = {'$', '~', '@', '#', '&', ' '};
-int ELEMENT_COLORS[5] = {1, 6, 2, 3, 5, 0};
+//属性別の記号の割り当て
+const char ELEMENT_SYMBOLS[EMPTY+1] = {'$','~','@','#','&', ' '};
+
+//属性別のカラーコード（ディスプレイ制御シーケンス用）
+const char ELEMENT_COLORS[EMPTY+1] = {1,6,2,3,5,0};
 
 /*** 構造体型宣言 ***/
-typedef char str[20];
-//1体のモンスター情報をまとめて管理するためのMonster型の定義
-typedef struct
-{
-  str name;
-  int hp;
-  int maxHp;
+//各モンスターのステータスを格納するMonster型の設定
+typedef struct MONSTER {
+  char* name;
   Element element;
+  int maxhp;
+  int hp;
   int attack;
   int defense;
 } Monster;
 
-//1つのダンジョン情報をまとめて管理するためのDungeon型の定義
-typedef struct
-{
-  Monster monster1;
-  Monster monster2;
-  Monster monster3;
-  Monster monster4;
-  Monster monster5;
+//各ダンジョン別のモンスターの種類と数を格納するDungeon型の設定
+typedef struct DUNGEON {
+  Monster* monsters;
+  const int numMonsters;
 } Dungeon;
 
 /*** プロトタイプ宣言 ***/
-void goDungeon(
-  char* playerName,
-  str enemy1,
-  int elementNumber1,
-  str enemy2,
-  int elementNumber2,
-  str enemy3,
-  int elementNumber3,
-  str enemy4,
-  int elementNumber4,
-  str enemy5,
-  int elementNumber5
-);
-void doBattle(str enemy, int elementNumber);
-void printMonsterName(str monster, int elementNuber);
+int goDungeon(char* playerName, Dungeon* dungeonPtr);
+int doBattle(Monster* enemyPtr);
+void printMonsterName(Monster* monsterPtr);
 /*** 関数宣言 ***/
 
-/*
-ゲーム開始〜終了までの処理を行う関数
-*/
+//ゲーム開始〜終了までの流れ
 int main(int argc, char** argv)
 {
-  if (argc == 1)
+  //プレイヤー名指定無しの場合のエラー表示
+  if (argc != 2)
   {
     printf("エラー：プレイヤー名を指定して起動してください");
     return 1;
   }
 
-    //敵モンスターの定義
-    Monster slime = {"スライム", 100, 100, WATER, 10, 5};
-    Monster goblin = {"ゴブリン", 200, 200, EARTH, 20, 15};
-    Monster bat = {"オオコウモリ", 300, 300, WIND, 30, 25};
-    Monster wolf = {"ウェアウルフ", 400, 400, WIND, 40, 30};
-    Monster dragon = {"ドラゴン", 800, 800, FIRE, 50, 40};
+  //Monster型の配列の設定
+  Monster dungeonMonsters [] = {
+    {"スライム", WATER, 100, 100, 10, 5},
+    {"ゴブリン", EARTH, 200, 200, 20, 15},
+    {"オオコウモリ", WIND, 300, 300, 30, 25},
+    {"ウェアウルフ", WIND, 400, 400, 40, 30},
+    {"ドラゴン", FIRE, 800, 800, 50, 40},
+  };
 
-    //ダンジョン内の敵モンスターの定義
-    Dungeon dungeon = {slime, goblin, bat, wolf, dragon};
+  //Dungeon型の変数の設定
+  Dungeon dungeon = {dungeonMonsters, 5};
 
-    //タイトル表示
-    printf("*** Puzzle & Monsters ***\n");
-    //ダンジョンに開始〜終了
-    goDungeon(
-      argv[1],
-      dungeon.monster1.name,
-      dungeon.monster1.element,
-      dungeon.monster2.name,
-      dungeon.monster2.element,
-      dungeon.monster3.name,
-      dungeon.monster3.element,
-      dungeon.monster4.name,
-      dungeon.monster4.element,
-      dungeon.monster5.name,
-      dungeon.monster5.element
-    );
-    //クリアー表示
-    printf("*** GAME CLEARED! ***\n");
-    //倒したモンスター数の表示
-    printf("倒したモンスター数＝5");
+  //タイトル表示
+  printf("*** Puzzle & Monsters ***\n");
 
+  //ダンジョン開始
+  int winCount = goDungeon(argv[1], &dungeon);
+
+  //ダンジョン終了後
+  if (winCount == 5){
+    printf("***GAME CLEARED!***\n");
+  } else {
+    printf("***GAME OVER***\n");
+  }
+  printf("倒したモンスター数＝%d", winCount);
   return 0;
 }
 
-/*
-ダンジョン開始〜終了までの処理を行う関数
-*/
-void goDungeon (
-  char* playerName,
-  str enemy1,
-  int elementNumber1,
-  str enemy2,
-  int elementNumber2,
-  str enemy3,
-  int elementNumber3,
-  str enemy4,
-  int elementNumber4,
-  str enemy5,
-  int elementNumber5
-  )
-{
-
+//ダンジョン開始〜終了まで
+int goDungeon(char* playerName, Dungeon* dungeonPtr){
   printf("%sはダンジョンに到着した\n", playerName);
-  doBattle(enemy1, elementNumber1);
-  doBattle(enemy2, elementNumber2);
-  doBattle(enemy3, elementNumber3);
-  doBattle(enemy4, elementNumber4);
-  doBattle(enemy5, elementNumber5);
+
+  int winCount = 0;
+  for (int i = 0; i < dungeonPtr->numMonsters; i++)
+  {
+    winCount += doBattle(&(dungeonPtr->monsters[i]));
+  }
   printf("%sはダンジョンを制覇した！\n", playerName);
+  return winCount;
 }
 
-/*
-1回のバトル開始〜終了までの処理を行う関数
-*/
-void doBattle (str enemy, int elementNumber)
-{
-  printMonsterName(enemy, elementNumber);
+//敵とのバトル
+int doBattle(Monster* enemyPtr){
+  printMonsterName(enemyPtr);
+  return 1;
 }
 
 /*** ユーティリティ関数宣言 ***/
+//モンスターの名前に適切な記号と属性の色を付与し、画面に表示する関数
+void printMonsterName(Monster* monsterPtr){
+  char symbol = ELEMENT_SYMBOLS[monsterPtr->element];
+  int color = ELEMENT_COLORS[monsterPtr->element];
 
-/*
-モンスター1体の情報を渡され、その名前の前後に記号を付け、適切な属性の色で
-画面に表示する関数
-*/
-void printMonsterName(str monster, int elementNumber)
-{
-  //「モンスターが現れた」表示
-  printf("\x1b[3%dm", ELEMENT_COLORS[elementNumber]);
-  printf("%c", ELEMENT_SYMBOLS[elementNumber]);
-  printf("%s", monster);
-  printf("%c", ELEMENT_SYMBOLS[elementNumber]);
-  printf("\x1b[0m");
-  printf("が現れた！\n");
-
-  //「モンスターを倒した」表示
-  printf("\x1b[3%dm", ELEMENT_COLORS[elementNumber]);
-  printf("%c", ELEMENT_SYMBOLS[elementNumber]);
-  printf("%s", monster);
-  printf("%c", ELEMENT_SYMBOLS[elementNumber]);
-  printf("\x1b[0m");
-  printf("を倒した！\n");
+  printf("\x1b[3%dm%c%s%c\x1b[0mが現れた！\n", color, symbol, monsterPtr->name, symbol);
+  printf("\x1b[3%dm%c%s%c\x1b[0mを倒した！\n", color, symbol, monsterPtr->name, symbol);
 }
