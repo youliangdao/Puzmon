@@ -44,10 +44,14 @@ typedef struct PARTY
 
 /*** プロトタイプ宣言 ***/
 int goDungeon(Dungeon* dungeonPtr, Party* partyPtr);
-int doBattle(Monster* enemyPtr);
+int doBattle(Monster* enemyPtr, Party* partyPtr);
 void printMonsterName(Monster* monsterPtr);
 Party organizeParty(Monster* monsters, int monsterNum, char* playerName);
 void showParty(Party* partyPtr);
+void onPlayerTurn(Monster* enemyPtr, Party* partyPtr);
+void doAttack(Monster* enemyPtr);
+void onEnemyTurn(Monster* enemyPtr, Party* partyPtr);
+void doEnemyAttack(Party* partyPtr);
 
 /*** 関数宣言 ***/
 
@@ -92,6 +96,7 @@ int main(int argc, char** argv)
 
   //ダンジョン終了後
   if (winCount == 5){
+    printf("%sはダンジョンを制覇した！\n", argv[1]);
     printf("***GAME CLEARED!***\n");
   } else {
     printf("***GAME OVER***\n");
@@ -108,28 +113,34 @@ int goDungeon(Dungeon* dungeonPtr, Party* partyPtr){
   int winCount = 0;
   for (int i = 0; i < dungeonPtr->numMonsters; i++)
   {
-    winCount += doBattle(&(dungeonPtr->monsters[i]));
-    if (partyPtr->hp <= 0)
+    printMonsterName(&(dungeonPtr->monsters[i]));
+    printf("が現れた！\n\n");
+    while (dungeonPtr->monsters[i].hp > 0)
     {
-      printf("%sはダンジョンから逃げ出した…\n", partyPtr->player);
+      winCount += doBattle(&(dungeonPtr->monsters[i]), partyPtr);
+      if (partyPtr->hp <= 0)
+      {
+        printf("%sはダンジョンから逃げ出した…\n", partyPtr->player);
+        break;
+      }
     }
-    else
-    {
-      printf("%sはさらに奥へと進んだ\n\n", partyPtr->player);
-    }
-    printf("=====\n\n");
   }
-  printf("%sはダンジョンを制覇した！\n", partyPtr->player);
   return winCount;
 }
 
 //敵とのバトル
-int doBattle(Monster* enemyPtr){
-  printMonsterName(enemyPtr);
-  printf("が現れた！\n");
-  printMonsterName(enemyPtr);
-  printf("を倒した！\n");
-  return 1;
+int doBattle(Monster* enemyPtr, Party* partyPtr){
+  onPlayerTurn(enemyPtr, partyPtr);
+  if (enemyPtr->hp <= 0)
+  {
+    printMonsterName(enemyPtr);
+    printf("を倒した！\n");
+    printf("%sはさらに奥へと進んだ\n\n", partyPtr->player);
+    printf("=====\n\n");
+    return 1;
+  }
+  onEnemyTurn(enemyPtr, partyPtr);
+  return 0;
 }
 
 //パーティ編成を行う
@@ -158,6 +169,25 @@ void showParty(Party* partyPtr){
   printf("--------------------------\n\n");
 }
 
+void onPlayerTurn(Monster* enemyPtr, Party* partyPtr){
+  printf("【%sのターン】\n", partyPtr->player);
+  doAttack(enemyPtr);
+}
+
+void doAttack(Monster* enemyPtr){
+  printf("ダミー攻撃で80のダメージを与えた\n");
+  enemyPtr->hp -= 80;
+}
+
+void onEnemyTurn(Monster* enemyPtr, Party* partyPtr){
+  printf("\n【%sのターン】\n", enemyPtr->name);
+  doEnemyAttack(partyPtr);
+}
+
+void doEnemyAttack(Party* partyPtr){
+  printf("20のダメージを受けた\n\n");
+  partyPtr->hp -= 20;
+}
 /*** ユーティリティ関数宣言 ***/
 
 //モンスターの名前に適切な記号と属性の色を付与し、画面に表示する関数
