@@ -59,7 +59,6 @@ typedef struct BATTLEFIELD
 /*** プロトタイプ宣言 ***/
 int goDungeon(Dungeon* pDungenon, Party* pParty);
 int doBattle(Monster* pMonster, Party* pParty);
-void printMonsterName(Monster* pMonster);
 Party organizeParty(Monster* monsters, int monsterNum, char* playerName);
 void showParty(Party* pParty);
 void onPlayerTurn(Battle_Field* pBattleField);
@@ -67,6 +66,9 @@ void doAttack(Monster* pMonster);
 void onEnemyTurn(Monster* pMonster, Party* pParty);
 void doEnemyAttack(Party* pParty);
 void showBattleField(Battle_Field* pBattleFiled);
+
+//ユーティリティ関数
+void printMonsterName(Monster* pMonster);
 void fillGems(Battle_Field* pBattleFiled);
 void printGems(Battle_Field* pBattleField);
 void printGem(char gem);
@@ -148,8 +150,11 @@ int goDungeon(Dungeon* pDungeon, Party* pParty){
 
 //敵とのバトル
 int doBattle(Monster* pMonster, Party* pParty){
+
+  //バトルフィールドの宝石スロットの準備と初期化
   Battle_Field battleField = {pParty, pMonster};
   fillGems(&battleField);
+
   onPlayerTurn(&battleField);
   if (pMonster->hp <= 0)
   {
@@ -214,8 +219,8 @@ void showBattleField(Battle_Field* pBattleField){
   printf("---------------------------------------\n\n");
   printf("       ");
   printMonsterName(pBattleField->pBattleMonster);
-  printf("\n       HP= %d / %d\n\n\n\n", pBattleField->pBattleMonster->hp, pBattleField->pBattleMonster->maxHp);
-
+  printf("\n       HP= %4d / %4d\n", pBattleField->pBattleMonster->hp, pBattleField->pBattleMonster->maxHp);
+  printf("\n\n");
   int sumHp = 0;
   for (int i = 0; i < pBattleField->pBattleParty->numPartyMonsters; i++)
   {
@@ -223,10 +228,11 @@ void showBattleField(Battle_Field* pBattleField){
     sumHp += d;
     printMonsterName(&(pBattleField->pBattleParty->monsters[i]));
   }
-  printf("\n       HP= %d / %d\n\n", pBattleField->pBattleParty->hp, sumHp);
+  printf("\n       HP= %4d / %4d\n", pBattleField->pBattleParty->hp, sumHp);
   printf("---------------------------------------\n\n");
 
   printGems(pBattleField);
+
   printf("---------------------------------------\n\n");
 }
 
