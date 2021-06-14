@@ -2,6 +2,9 @@
 /*** インクルード宣言 ***/
 
 #include <stdio.h>
+#include <stdlib.h>
+#include <time.h>
+
 
 /*** 列挙型宣言 ***/
 //属性を0~5まで割り当てる
@@ -14,12 +17,15 @@ const char ELEMENT_SYMBOLS[EMPTY+1] = {'$','~','@','#','&', ' '};
 //属性別のカラーコード（ディスプレイ制御シーケンス用）
 const char ELEMENT_COLORS[EMPTY+1] = {1,6,2,3,5,0};
 
+//バトルフィールドに発生させる宝石の個数
+enum {MAX_GEMS = 14};
+
 /*** 構造体型宣言 ***/
 //各モンスターのステータスを格納するMonster型の設定
 typedef struct MONSTER {
   char* name;
   Element element;
-  int maxhp;
+  int maxHp;
   int hp;
   int attack;
   int defense;
@@ -34,24 +40,36 @@ typedef struct DUNGEON {
 //パーティ関連情報をまとめて管理する構造体Party型の設定
 typedef struct PARTY
 {
-  Monster* partyMonsters;
+  Monster* monsters;
   const int numPartyMonsters;
   char* player;
   int hp;
   int averageDefense;
 } Party;
 
+//バトルの場に登場する「パーティー」「敵モンスター」「宝石スロット」をまとめて管理する構造体BattleFiled型の設定
+typedef struct BATTLEFIELD
+{
+  Party* pBattleParty;
+  Monster* pBattleMonster;
+  Element gems[MAX_GEMS];
+} Battle_Field;
+
 
 /*** プロトタイプ宣言 ***/
-int goDungeon(Dungeon* dungeonPtr, Party* partyPtr);
-int doBattle(Monster* enemyPtr, Party* partyPtr);
-void printMonsterName(Monster* monsterPtr);
+int goDungeon(Dungeon* pDungenon, Party* pParty);
+int doBattle(Monster* pMonster, Party* pParty);
+void printMonsterName(Monster* pMonster);
 Party organizeParty(Monster* monsters, int monsterNum, char* playerName);
-void showParty(Party* partyPtr);
-void onPlayerTurn(Monster* enemyPtr, Party* partyPtr);
-void doAttack(Monster* enemyPtr);
-void onEnemyTurn(Monster* enemyPtr, Party* partyPtr);
-void doEnemyAttack(Party* partyPtr);
+void showParty(Party* pParty);
+void onPlayerTurn(Battle_Field* pBattleField);
+void doAttack(Monster* pMonster);
+void onEnemyTurn(Monster* pMonster, Party* pParty);
+void doEnemyAttack(Party* pParty);
+void showBattleField(Battle_Field* pBattleFiled);
+void fillGems(Battle_Field* pBattleFiled);
+void printGems(Battle_Field* pBattleField);
+void printGem(char gem);
 
 /*** 関数宣言 ***/
 
@@ -106,21 +124,21 @@ int main(int argc, char** argv)
 }
 
 //ダンジョン開始〜終了まで
-int goDungeon(Dungeon* dungeonPtr, Party* partyPtr){
-  printf("%sのパーティー（HP=%d）はダンジョンに到着した\n\n", partyPtr->player, partyPtr->hp);
-  showParty(partyPtr);
+int goDungeon(Dungeon* pDungeon, Party* pParty){
+  printf("%sのパーティー（HP=%d）はダンジョンに到着した\n\n", pParty->player, pParty->hp);
+  showParty(pParty);
 
   int winCount = 0;
-  for (int i = 0; i < dungeonPtr->numMonsters; i++)
+  for (int i = 0; i < pDungeon->numMonsters; i++)
   {
-    printMonsterName(&(dungeonPtr->monsters[i]));
+    printMonsterName(&(pDungeon->monsters[i]));
     printf("が現れた！\n\n");
-    while (dungeonPtr->monsters[i].hp > 0)
+    while (pDungeon->monsters[i].hp > 0)
     {
-      winCount += doBattle(&(dungeonPtr->monsters[i]), partyPtr);
-      if (partyPtr->hp <= 0)
+      winCount += doBattle(&(pDungeon->monsters[i]), pParty);
+      if (pParty->hp <= 0)
       {
-        printf("%sはダンジョンから逃げ出した…\n", partyPtr->player);
+        printf("%sはダンジョンから逃げ出した…\n", pParty->player);
         break;
       }
     }
@@ -129,17 +147,19 @@ int goDungeon(Dungeon* dungeonPtr, Party* partyPtr){
 }
 
 //敵とのバトル
-int doBattle(Monster* enemyPtr, Party* partyPtr){
-  onPlayerTurn(enemyPtr, partyPtr);
-  if (enemyPtr->hp <= 0)
+int doBattle(Monster* pMonster, Party* pParty){
+  Battle_Field battleField = {pParty, pMonster};
+  fillGems(&battleField);
+  onPlayerTurn(&battleField);
+  if (pMonster->hp <= 0)
   {
-    printMonsterName(enemyPtr);
+    printMonsterName(pMonster);
     printf("を倒した！\n");
-    printf("%sはさらに奥へと進んだ\n\n", partyPtr->player);
+    printf("%sはさらに奥へと進んだ\n\n", pParty->player);
     printf("=====\n\n");
     return 1;
   }
-  onEnemyTurn(enemyPtr, partyPtr);
+  onEnemyTurn(pMonster, pParty);
   return 0;
 }
 
@@ -159,41 +179,96 @@ Party organizeParty(Monster* monsters, int monsterNum, char* playerName){
 }
 
 //パーティ編成情報を一覧表示
-void showParty(Party* partyPtr){
+void showParty(Party* pParty){
   printf("<パーティ編成情報>--------\n");
-  for (int i = 0; i < partyPtr->numPartyMonsters; i++)
+  for (int i = 0; i < pParty->numPartyMonsters; i++)
   {
-    printMonsterName(&(partyPtr->partyMonsters[i]));
-    printf(" HP= %d 攻撃= %d 防御= %d\n", partyPtr->partyMonsters[i].hp, partyPtr->partyMonsters[i].attack, partyPtr->partyMonsters[i].defense);
-  }
-  printf("--------------------------\n\n");
+    printMonsterName(&(pParty->monsters[i]));
+    printf(" HP= %d 攻撃= %d 防御= %d\n", pParty->monsters[i].hp, pParty->monsters[i].attack, pParty->monsters[i].defense); }
+    printf("--------------------------\n\n");
 }
 
-void onPlayerTurn(Monster* enemyPtr, Party* partyPtr){
-  printf("【%sのターン】\n", partyPtr->player);
-  doAttack(enemyPtr);
+void onPlayerTurn(Battle_Field* pBattleFiled){
+  printf("【%sのターン】\n", pBattleFiled->pBattleParty->player);
+
+  showBattleField(pBattleFiled);
+  doAttack(pBattleFiled->pBattleMonster);
 }
 
-void doAttack(Monster* enemyPtr){
+void doAttack(Monster* pMonster){
   printf("ダミー攻撃で80のダメージを与えた\n");
-  enemyPtr->hp -= 80;
+  pMonster->hp -= 80;
 }
 
-void onEnemyTurn(Monster* enemyPtr, Party* partyPtr){
-  printf("\n【%sのターン】\n", enemyPtr->name);
-  doEnemyAttack(partyPtr);
+void onEnemyTurn(Monster* pMonster, Party* pParty){
+  printf("\n【%sのターン】\n", pMonster->name);
+  doEnemyAttack(pParty);
 }
 
-void doEnemyAttack(Party* partyPtr){
+void doEnemyAttack(Party* pParty){
   printf("20のダメージを受けた\n\n");
-  partyPtr->hp -= 20;
+  pParty->hp -= 20;
 }
+
+void showBattleField(Battle_Field* pBattleField){
+  printf("---------------------------------------\n\n");
+  printf("       ");
+  printMonsterName(pBattleField->pBattleMonster);
+  printf("\n       HP= %d / %d\n\n\n\n", pBattleField->pBattleMonster->hp, pBattleField->pBattleMonster->maxHp);
+
+  int sumHp = 0;
+  for (int i = 0; i < pBattleField->pBattleParty->numPartyMonsters; i++)
+  {
+    int d = pBattleField->pBattleParty->monsters[i].hp;
+    sumHp += d;
+    printMonsterName(&(pBattleField->pBattleParty->monsters[i]));
+  }
+  printf("\n       HP= %d / %d\n\n", pBattleField->pBattleParty->hp, sumHp);
+  printf("---------------------------------------\n\n");
+
+  printGems(pBattleField);
+  printf("---------------------------------------\n\n");
+}
+
 /*** ユーティリティ関数宣言 ***/
 
 //モンスターの名前に適切な記号と属性の色を付与し、画面に表示する関数
-void printMonsterName(Monster* monsterPtr){
-  char symbol = ELEMENT_SYMBOLS[monsterPtr->element];
-  int color = ELEMENT_COLORS[monsterPtr->element];
+void printMonsterName(Monster* pMonster){
+  char symbol = ELEMENT_SYMBOLS[pMonster->element];
+  int color = ELEMENT_COLORS[pMonster->element];
 
-  printf("\x1b[3%dm%c%s%c\x1b[0m", color, symbol, monsterPtr->name, symbol);
+  printf("\x1b[3%dm%c%s%c\x1b[0m", color, symbol, pMonster->name, symbol);
+}
+
+//バトルフィールドの宝石スロットにランダムに宝石を発生させる関数
+void fillGems(Battle_Field* pBattleField){
+  srand((unsigned)time(0UL));
+  for (int i = 0; i < MAX_GEMS; i++)
+  {
+    pBattleField->gems[i] = rand() % (EMPTY + 1);
+  }
+}
+
+//バトルフィールドの宝石スロットを画面に表示
+void printGems(Battle_Field* pBattleField){
+  for (int i = 0; i < MAX_GEMS; i++)
+  {
+    printf(" ");
+    printf("%c", (65 + i));
+  }
+
+  printf("\n");
+
+  for (int i = 0; i < MAX_GEMS; i++)
+  {
+    printf(" ");
+    printGem(pBattleField->gems[i]);
+  }
+  printf("\n\n");
+}
+
+void printGem(char gem){
+  char symbol = ELEMENT_SYMBOLS[gem];
+  int color = ELEMENT_COLORS[gem];
+  printf("\x1b[4%dm%c\x1b[49m", color, symbol);
 }
