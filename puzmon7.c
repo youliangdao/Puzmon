@@ -303,7 +303,7 @@ void evaluateGems(Element* elements, Monster* pMonster){
   BanishInfo banishInfo = checkBanishable(elements);
 
   //消去可能箇所がある場合
-  if (banishInfo.contNum >= 3)
+  if (banishInfo.contNum != 0)
   {
     banishGems(elements, &banishInfo, pMonster);
     shiftGems(&banishInfo, elements);
@@ -312,53 +312,35 @@ void evaluateGems(Element* elements, Monster* pMonster){
 }
 
 BanishInfo checkBanishable(Element* elements){
-  int count = 0;
-  Element element;
-  int position[14];
-  int seqCount = 1;
-  int startPos;
+  const int BANISH_GEMS = 3; ////消滅に必要な連続数
 
-  for (int i = 0; i < 5; i++)
+  for (int i = 0; i < MAX_GEMS - BANISH_GEMS + 1; i++)
   {
-    for (int j = 0; j < MAX_GEMS; j++)
+    Element targetGem = elements[i];
+    int count = 1;
+    if (targetGem == EMPTY) continue;
+    for (int j = i + 1; i < MAX_GEMS; j++)
     {
-      if (elements[j] == i)
+      if (elements[i] == elements[j])
       {
         count++;
-        position[count - 1] = j;
-      }
-    }
-
-    for (int i = 0; i < count; i++)
-    {
-      if (position[i] + 1 == position[i + 1] && seqCount > 1)
-      {
-        seqCount++;
-      }
-      else if (position[i] + 1 == position[i + 1] && seqCount == 1)
-      {
-        seqCount++;
-        startPos = position[i];
-      }
-      else if (position[i] + 1 != position[i + 1] && seqCount >= 3)
-      {
-        break;
       }
       else
       {
-        startPos = 14;
-        seqCount = 1;
+        break;
       }
     }
-    if (seqCount >= 3)
+
+    if (count >= BANISH_GEMS)
     {
-      element = i;
-      break;
+      BanishInfo found = {targetGem, i, count};
+      return found;
     }
   }
 
-  BanishInfo b = {element, startPos, seqCount};
-  return b;
+  //見つからなかった
+  BanishInfo notFound = {EMPTY, 0, 0};
+  return notFound;
 }
 
 void banishGems(Element* elements, BanishInfo* pBanishInfo, Monster* pMonster)
@@ -373,9 +355,11 @@ void banishGems(Element* elements, BanishInfo* pBanishInfo, Monster* pMonster)
 }
 
 void shiftGems(BanishInfo* pBanishInfo, Element* elements){
+  int endEmpPos = pBanishInfo->position + pBanishInfo->contNum -1;
+
   for (int i = 0; i < pBanishInfo->contNum; i++)
   {
-    moveGem(pBanishInfo->position + pBanishInfo->contNum -1 - i, 13 - i, elements, false);
+    moveGem(endEmpPos - i, 13 - i, elements, false);
     printGems(elements);
   }
 }
