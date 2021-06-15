@@ -4,7 +4,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
-
+#include <stdbool.h>
+#include <string.h>
 
 /*** 列挙型宣言 ***/
 //属性を0~5まで割り当てる
@@ -66,12 +67,16 @@ void doAttack(Monster* pMonster);
 void onEnemyTurn(Monster* pMonster, Party* pParty);
 void doEnemyAttack(Party* pParty);
 void showBattleField(Battle_Field* pBattleFiled);
+bool checkValidCommand(char* commands);
+void evaluateGems(Monster* pMonster);
 
 //ユーティリティ関数
 void printMonsterName(Monster* pMonster);
-void fillGems(Battle_Field* pBattleFiled);
-void printGems(Battle_Field* pBattleField);
+void fillGems(Element* elements, bool emptyOnly);
+void printGems(Element* elements);
 void printGem(char gem);
+void moveGem(char* commands, Element* elements);
+void swapGem(char stdCommand, Element* elements, bool dir);
 
 /*** 関数宣言 ***/
 
@@ -153,19 +158,28 @@ int doBattle(Monster* pMonster, Party* pParty){
 
   //バトルフィールドの宝石スロットの準備と初期化
   Battle_Field battleField = {pParty, pMonster};
-  fillGems(&battleField);
+  fillGems(battleField.gems, false);
 
-  onPlayerTurn(&battleField);
-  if (pMonster->hp <= 0)
+  //味方ターン
+  while (true)
   {
-    printMonsterName(pMonster);
-    printf("を倒した！\n");
-    printf("%sはさらに奥へと進んだ\n\n", pParty->player);
-    printf("=====\n\n");
-    return 1;
+    onPlayerTurn(&battleField);
+    if (pMonster->hp <= 0)
+    {
+      printMonsterName(pMonster);
+      printf("を倒した！\n");
+      printf("%sはさらに奥へと進んだ\n\n", pParty->player);
+      printf("=====\n\n");
+      return 1;
+    }
+  //敵ターン
+    onEnemyTurn(pMonster, pParty);
+    if (pParty->hp <= 0)
+    {
+      printf("%sは倒れた…\n", pParty->player);
+      return 0;
+    }
   }
-  onEnemyTurn(pMonster, pParty);
-  return 0;
 }
 
 //パーティ編成を行う
@@ -193,13 +207,26 @@ void showParty(Party* pParty){
     printf("--------------------------\n\n");
 }
 
+//味方ターンの処理を行う関数
 void onPlayerTurn(Battle_Field* pBattleFiled){
   printf("【%sのターン】\n", pBattleFiled->pBattleParty->player);
-
   showBattleField(pBattleFiled);
-  doAttack(pBattleFiled->pBattleMonster);
+
+  char command[3];
+  bool check;
+  do {
+    //プレイヤーにコマンドを入力させる
+    printf("コマンド？>");
+    scanf("%2s", command);
+    //適切なコマンドかどうかをチェックする
+  } while (checkValidCommand(command) == false);
+
+  //宝石を移動させた上で「宝石スロットの評価」を機能させる
+  moveGem(command, pBattleFiled->gems);
+  evaluateGems(pBattleFiled->pBattleMonster);
 }
 
+//敵に攻撃を加える関数
 void doAttack(Monster* pMonster){
   printf("ダミー攻撃で80のダメージを与えた\n");
   pMonster->hp -= 80;
@@ -227,13 +254,39 @@ void showBattleField(Battle_Field* pBattleField){
     int d = pBattleField->pBattleParty->monsters[i].hp;
     sumHp += d;
     printMonsterName(&(pBattleField->pBattleParty->monsters[i]));
+    printf("  ");
   }
-  printf("\n       HP= %4d / %4d\n", pBattleField->pBattleParty->hp, sumHp);
-  printf("---------------------------------------\n\n");
+  printf("\n       HP= %4d / %4d\n\n", pBattleField->pBattleParty->hp, sumHp);
+  printf("---------------------------------------\n");
+  for (int i = 0; i < MAX_GEMS; i++)
+  {
+    printf(" ");
+    printf("%c", (65 + i));
+  }
+  printf("\n");
 
-  printGems(pBattleField);
+  printGems(pBattleField->gems);
 
   printf("---------------------------------------\n\n");
+}
+
+//適切なコマンドかどうかをチェックする関数
+bool checkValidCommand(char* commands){
+
+  //コマンドの長さは必ず2であるべき
+  if (strlen(commands) != 2) return false;
+  //１文字目と２文字目が同じであれば不正
+  if (commands[0] == commands[1]) return false;
+  //１文字目がA~Nの範囲でなければ不正
+  if (commands[0] < 'A' || commands[0] > 'A' + MAX_GEMS - 1) return false;
+  //２文字目もA〜Nの範囲でなければ不正
+  if (commands[1] < 'A' || commands[1] > 'A' + MAX_GEMS - 1) return false;
+  //それ以外は有効
+  return true;
+}
+
+void evaluateGems(Monster* pMonster){
+  doAttack(pMonster);
 }
 
 /*** ユーティリティ関数宣言 ***/
@@ -247,34 +300,62 @@ void printMonsterName(Monster* pMonster){
 }
 
 //バトルフィールドの宝石スロットにランダムに宝石を発生させる関数
-void fillGems(Battle_Field* pBattleField){
-  srand((unsigned)time(0UL));
+void fillGems(Element* elements, bool emptyOnly){
   for (int i = 0; i < MAX_GEMS; i++)
   {
-    pBattleField->gems[i] = rand() % (EMPTY + 1);
+    if (!emptyOnly || elements[i] == EMPTY)
+    {
+      elements[i] = rand() % (EMPTY);
+    }
   }
 }
 
 //バトルフィールドの宝石スロットを画面に表示
-void printGems(Battle_Field* pBattleField){
+void printGems(Element* elements){
   for (int i = 0; i < MAX_GEMS; i++)
   {
     printf(" ");
-    printf("%c", (65 + i));
+    printGem(elements[i]);
   }
-
   printf("\n");
-
-  for (int i = 0; i < MAX_GEMS; i++)
-  {
-    printf(" ");
-    printGem(pBattleField->gems[i]);
-  }
-  printf("\n\n");
 }
 
 void printGem(char gem){
   char symbol = ELEMENT_SYMBOLS[gem];
   int color = ELEMENT_COLORS[gem];
-  printf("\x1b[4%dm%c\x1b[49m", color, symbol);
+  printf("\x1b[4%dm\x1b[30m%c\x1b[39m\x1b[49m", color, symbol);
+}
+
+//指定位置の宝石を別の指定位置に移動させる関数
+void moveGem(char* commands, Element* elements){
+  if (commands[1] > commands[0])
+  {
+    for (int i = 0; i < (commands[1] - commands[0]); i++)
+    {
+      swapGem(commands[0] + i, elements, true);
+      printGems(elements);
+    }
+
+  } else {
+    for (int i = 0; i < (commands[0] - commands[1]); i++)
+    {
+      swapGem(commands[0] - i, elements, false);
+      printGems(elements);
+    }
+  }
+}
+
+//指定位置の宝石を指定した方向の隣の宝石と入れ替える関数
+void swapGem(char stdCommand, Element* elements, bool dir){
+  char rep = elements[stdCommand - 65];
+  if (dir)
+  {
+    elements[stdCommand - 65] = elements[(stdCommand - 65) + 1];
+    elements[(stdCommand - 65) + 1] = rep;
+  }
+  else
+  {
+    elements[stdCommand - 65] = elements[(stdCommand - 65) -1];
+    elements[(stdCommand - 65) - 1] = rep;
+  }
 }
