@@ -56,6 +56,15 @@ typedef struct BATTLEFIELD
   Element gems[MAX_GEMS];
 } Battle_Field;
 
+/*消去可能な宝石の並びに関する情報（属性・開始位置・連続数）
+をまとめて管理するための構造体Banishinfo型の設定*/
+typedef struct BANISHINFO
+{
+  Element type;
+  int position;
+  int contNum;
+} BanishInfo;
+
 
 /*** プロトタイプ宣言 ***/
 int goDungeon(Dungeon* pDungenon, Party* pParty);
@@ -68,15 +77,19 @@ void onEnemyTurn(Monster* pMonster, Party* pParty);
 void doEnemyAttack(Party* pParty);
 void showBattleField(Battle_Field* pBattleFiled);
 bool checkValidCommand(char* commands);
-void evaluateGems(Monster* pMonster);
+void evaluateGems(Element* elements, Monster* pMonster);
+BanishInfo checkBanishable(Element* elements);
+void banishGems(Element* elements, BanishInfo* pBanishInfo, Monster* pMonster);
+void shiftGems(BanishInfo* pBanishInfo, Element* elements);
+void spawnGems(Element* elements);
 
 //ユーティリティ関数
 void printMonsterName(Monster* pMonster);
 void fillGems(Element* elements, bool emptyOnly);
 void printGems(Element* elements);
 void printGem(char gem);
-void moveGem(char* commands, Element* elements);
-void swapGem(char stdCommand, Element* elements, bool dir);
+void moveGem(int start, int end, Element* elements, bool printProcess);
+void swapGem(int std, Element* elements, bool dir);
 
 /*** 関数宣言 ***/
 
@@ -160,9 +173,9 @@ int doBattle(Monster* pMonster, Party* pParty){
   Battle_Field battleField = {pParty, pMonster};
   fillGems(battleField.gems, false);
 
-  //味方ターン
   while (true)
   {
+    //味方ターン
     onPlayerTurn(&battleField);
     if (pMonster->hp <= 0)
     {
@@ -172,7 +185,8 @@ int doBattle(Monster* pMonster, Party* pParty){
       printf("=====\n\n");
       return 1;
     }
-  //敵ターン
+
+    //敵ターン
     onEnemyTurn(pMonster, pParty);
     if (pParty->hp <= 0)
     {
@@ -222,8 +236,8 @@ void onPlayerTurn(Battle_Field* pBattleFiled){
   } while (checkValidCommand(command) == false);
 
   //宝石を移動させた上で「宝石スロットの評価」を機能させる
-  moveGem(command, pBattleFiled->gems);
-  evaluateGems(pBattleFiled->pBattleMonster);
+  moveGem(command[0] - 'A', command[1] - 'A', pBattleFiled->gems, true);
+  evaluateGems(pBattleFiled->gems, pBattleFiled->pBattleMonster);
 }
 
 //敵に攻撃を加える関数
@@ -285,8 +299,90 @@ bool checkValidCommand(char* commands){
   return true;
 }
 
-void evaluateGems(Monster* pMonster){
+void evaluateGems(Element* elements, Monster* pMonster){
+  BanishInfo banishInfo = checkBanishable(elements);
+
+  //消去可能箇所がある場合
+  if (banishInfo.contNum >= 3)
+  {
+    banishGems(elements, &banishInfo, pMonster);
+    shiftGems(&banishInfo, elements);
+    spawnGems(elements);
+  }
+}
+
+BanishInfo checkBanishable(Element* elements){
+  int count = 0;
+  Element element;
+  int position[14];
+  int seqCount = 1;
+  int startPos;
+
+  for (int i = 0; i < 5; i++)
+  {
+    for (int j = 0; j < MAX_GEMS; j++)
+    {
+      if (elements[j] == i)
+      {
+        count++;
+        position[count - 1] = j;
+      }
+    }
+
+    for (int i = 0; i < count; i++)
+    {
+      if (position[i] + 1 == position[i + 1] && seqCount > 1)
+      {
+        seqCount++;
+      }
+      else if (position[i] + 1 == position[i + 1] && seqCount == 1)
+      {
+        seqCount++;
+        startPos = position[i];
+      }
+      else if (position[i] + 1 != position[i + 1] && seqCount >= 3)
+      {
+        break;
+      }
+      else
+      {
+        startPos = 14;
+        seqCount = 1;
+      }
+    }
+    if (seqCount >= 3)
+    {
+      element = i;
+      break;
+    }
+  }
+
+  BanishInfo b = {element, startPos, seqCount};
+  return b;
+}
+
+void banishGems(Element* elements, BanishInfo* pBanishInfo, Monster* pMonster)
+{
+  for (int i = 0; i < pBanishInfo->contNum; i++)
+  {
+    elements[pBanishInfo->position + i] = EMPTY;
+  }
+  printGems(elements);
   doAttack(pMonster);
+  printGems(elements);
+}
+
+void shiftGems(BanishInfo* pBanishInfo, Element* elements){
+  for (int i = 0; i < pBanishInfo->contNum; i++)
+  {
+    moveGem(pBanishInfo->position + pBanishInfo->contNum -1 - i, 13 - i, elements, false);
+    printGems(elements);
+  }
+}
+
+void spawnGems(Element* elements){
+  fillGems(elements, true);
+  printGems(elements);
 }
 
 /*** ユーティリティ関数宣言 ***/
@@ -327,35 +423,35 @@ void printGem(char gem){
 }
 
 //指定位置の宝石を別の指定位置に移動させる関数
-void moveGem(char* commands, Element* elements){
-  if (commands[1] > commands[0])
+void moveGem(int start, int end, Element* elements, bool printProcess){
+  if (end > start)
   {
-    for (int i = 0; i < (commands[1] - commands[0]); i++)
+    for (int i = 0; i < (end - start); i++)
     {
-      swapGem(commands[0] + i, elements, true);
-      printGems(elements);
+      swapGem(start + i, elements, true);
+      if (printProcess) printGems(elements);
     }
 
   } else {
-    for (int i = 0; i < (commands[0] - commands[1]); i++)
+    for (int i = 0; i < (start - end); i++)
     {
-      swapGem(commands[0] - i, elements, false);
-      printGems(elements);
+      swapGem(start - i, elements, false);
+      if (printProcess) printGems(elements);
     }
   }
 }
 
 //指定位置の宝石を指定した方向の隣の宝石と入れ替える関数
-void swapGem(char stdCommand, Element* elements, bool dir){
-  char rep = elements[stdCommand - 65];
+void swapGem(int std, Element* elements, bool dir){
+  char rep = elements[std];
   if (dir)
   {
-    elements[stdCommand - 65] = elements[(stdCommand - 65) + 1];
-    elements[(stdCommand - 65) + 1] = rep;
+    elements[std] = elements[std + 1];
+    elements[std+ 1] = rep;
   }
   else
   {
-    elements[stdCommand - 65] = elements[(stdCommand - 65) -1];
-    elements[(stdCommand - 65) - 1] = rep;
+    elements[std] = elements[std - 1];
+    elements[std - 1] = rep;
   }
 }
