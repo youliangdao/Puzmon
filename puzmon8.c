@@ -6,6 +6,7 @@
 #include <time.h>
 #include <stdbool.h>
 #include <string.h>
+#include <math.h>
 
 /*** 列挙型宣言 ***/
 //属性を0~5まで割り当てる
@@ -20,6 +21,10 @@ const char ELEMENT_COLORS[EMPTY+1] = {1,6,2,3,5,0};
 
 //バトルフィールドに発生させる宝石の個数
 enum {MAX_GEMS = 14};
+
+//2つの属性を添字に指定すると、ダメージ増幅率を取り出せるdouble２次元配列
+double ELEMENT_BOOST[4][4] = {{1.0, 0.5, 2.0, 1.0}, {2.0, 1.0, 1.0, 0.5}, {0.5, 1.0, 1.0, 2.0}, {1.0, 2.0, 0.5, 1.0}};
+
 
 /*** 構造体型宣言 ***/
 //各モンスターのステータスを格納するMonster型の設定
@@ -72,16 +77,17 @@ int doBattle(Monster* pMonster, Party* pParty);
 Party organizeParty(Monster* monsters, int monsterNum, char* playerName);
 void showParty(Party* pParty);
 void onPlayerTurn(Battle_Field* pBattleField);
-void doAttack(Monster* pMonster);
+void doAttack(Battle_Field* pBattleField, BanishInfo* pBanishInfo);
 void onEnemyTurn(Monster* pMonster, Party* pParty);
-void doEnemyAttack(Party* pParty);
+void doEnemyAttack(Monster* pMonster, Party* pParty);
 void showBattleField(Battle_Field* pBattleFiled);
 bool checkValidCommand(char* commands);
-void evaluateGems(Element* elements, Monster* pMonster);
+void evaluateGems(Battle_Field* pBattleField);
 BanishInfo checkBanishable(Element* elements);
-void banishGems(Element* elements, BanishInfo* pBanishInfo, Monster* pMonster);
+void banishGems(Battle_Field* pBattleField, BanishInfo* pBanishInfo);
 void shiftGems(BanishInfo* pBanishInfo, Element* elements);
 void spawnGems(Element* elements);
+void doRecover(Battle_Field* pBattleField, BanishInfo* pBanishInfo);
 
 //ユーティリティ関数
 void printMonsterName(Monster* pMonster);
@@ -90,6 +96,10 @@ void printGems(Element* elements);
 void printGem(char gem);
 void moveGem(int start, int end, Element* elements, bool printProcess);
 void swapGem(int std, Element* elements, bool dir);
+int calcRecoverDamage(BanishInfo* pBanishInfo);
+int blurDamage(double damage);
+int calcAttackDamage(Battle_Field* pBattleField, BanishInfo* pBanishInfo);
+int calcEnemyDamage(Monster* pMonster, Party* pParty);
 
 /*** 関数宣言 ***/
 
@@ -173,6 +183,7 @@ int doBattle(Monster* pMonster, Party* pParty){
   Battle_Field battleField = {pParty, pMonster};
   fillGems(battleField.gems, false);
 
+  //交互ターンの実現
   while (true)
   {
     //味方ターン
@@ -237,23 +248,47 @@ void onPlayerTurn(Battle_Field* pBattleFiled){
 
   //宝石を移動させた上で「宝石スロットの評価」を機能させる
   moveGem(command[0] - 'A', command[1] - 'A', pBattleFiled->gems, true);
-  evaluateGems(pBattleFiled->gems, pBattleFiled->pBattleMonster);
+  evaluateGems(pBattleFiled);
 }
 
 //敵に攻撃を加える関数
-void doAttack(Monster* pMonster){
-  printf("ダミー攻撃で80のダメージを与えた\n");
-  pMonster->hp -= 80;
+void doAttack(Battle_Field* pBattleField, BanishInfo* pBanishInfo){
+  int partyDamage = calcAttackDamage(pBattleField, pBanishInfo);
+
+  Monster* pAttackMonster;
+  switch (pBanishInfo->type)
+  {
+  case FIRE:
+    pAttackMonster = &pBattleField->pBattleParty->monsters[0];
+    break;
+  case WATER:
+    pAttackMonster = &pBattleField->pBattleParty->monsters[3];
+    break;
+  case WIND:
+    pAttackMonster = &pBattleField->pBattleParty->monsters[1];
+    break;
+  case EARTH:
+    pAttackMonster = &pBattleField->pBattleParty->monsters[2];
+    break;
+  default:
+    break;
+  }
+
+  printf("%sの攻撃！？\n", pAttackMonster->name);
+  printf("%sに%dのダメージ！\n", pBattleField->pBattleMonster->name, partyDamage);
+  pBattleField->pBattleMonster->hp -= partyDamage;
 }
 
 void onEnemyTurn(Monster* pMonster, Party* pParty){
   printf("\n【%sのターン】\n", pMonster->name);
-  doEnemyAttack(pParty);
+  doEnemyAttack(pMonster, pParty);
 }
 
-void doEnemyAttack(Party* pParty){
-  printf("20のダメージを受けた\n\n");
-  pParty->hp -= 20;
+void doEnemyAttack(Monster* pMonster, Party* pParty){
+  int enemyAttack = calcEnemyDamage(pMonster, pParty);
+  printMonsterName(pMonster);
+  printf("の攻撃！%dのダメージを受けた\n", enemyAttack);
+  pParty->hp -= enemyAttack;
 }
 
 void showBattleField(Battle_Field* pBattleField){
@@ -299,15 +334,15 @@ bool checkValidCommand(char* commands){
   return true;
 }
 
-void evaluateGems(Element* elements, Monster* pMonster){
-  BanishInfo banishInfo = checkBanishable(elements);
+void evaluateGems(Battle_Field* pBattleField){
+  BanishInfo banishInfo = checkBanishable(pBattleField->gems);
 
   //消去可能箇所がある場合
   if (banishInfo.contNum != 0)
   {
-    banishGems(elements, &banishInfo, pMonster);
-    shiftGems(&banishInfo, elements);
-    spawnGems(elements);
+    banishGems(pBattleField, &banishInfo);
+    shiftGems(&banishInfo, pBattleField->gems);
+    spawnGems(pBattleField->gems);
   }
 }
 
@@ -343,15 +378,27 @@ BanishInfo checkBanishable(Element* elements){
   return notFound;
 }
 
-void banishGems(Element* elements, BanishInfo* pBanishInfo, Monster* pMonster)
+void banishGems(Battle_Field* pBattleField, BanishInfo* pBanishInfo)
 {
   for (int i = 0; i < pBanishInfo->contNum; i++)
   {
-    elements[pBanishInfo->position + i] = EMPTY;
+    pBattleField->gems[pBanishInfo->position + i] = EMPTY;
   }
-  printGems(elements);
-  doAttack(pMonster);
-  printGems(elements);
+  printGems(pBattleField->gems);
+
+  //パーティ攻撃か回復か？
+  if (pBanishInfo->type == LIFE)
+  {
+    doRecover(pBattleField, pBanishInfo);
+  }
+  else
+  {
+    doAttack(pBattleField, pBanishInfo);
+  }
+
+
+  //パーティ攻撃後の宝石スロットの表示
+  printGems(pBattleField->gems);
 }
 
 void shiftGems(BanishInfo* pBanishInfo, Element* elements){
@@ -367,6 +414,11 @@ void shiftGems(BanishInfo* pBanishInfo, Element* elements){
 void spawnGems(Element* elements){
   fillGems(elements, true);
   printGems(elements);
+}
+
+void doRecover(Battle_Field* pBattleField, BanishInfo* pBanishInfo){
+  printf("回復処理を行う\n");
+  pBattleField->pBattleParty->hp += calcRecoverDamage(pBanishInfo);
 }
 
 /*** ユーティリティ関数宣言 ***/
@@ -437,5 +489,69 @@ void swapGem(int std, Element* elements, bool dir){
   {
     elements[std] = elements[std - 1];
     elements[std - 1] = rep;
+  }
+}
+
+//パーティーのHP回復量を算出する関数
+int calcRecoverDamage(BanishInfo* pBanishInfo){
+  double recover = 20 * (pow(1.5, pBanishInfo->contNum -3));
+  int recoverDamage = blurDamage(recover);
+
+  return recoverDamage;
+}
+
+//指定値を中心に指定の範囲で数値をランダムにぶれさせる関数
+int blurDamage(double damage){
+  srand((unsigned)time(0UL));
+  int r = rand () % 21 + 90;
+  damage = damage * r / 100;
+  return damage;
+}
+
+//パーティーによる攻撃ダメージを算出する関数
+int calcAttackDamage(Battle_Field* pBattleField, BanishInfo* pBanishInfo){
+  int partyAttack;
+  switch (pBanishInfo->type)
+  {
+  case FIRE:
+    partyAttack = pBattleField->pBattleParty->monsters[0].attack;
+    break;
+  case WATER:
+    partyAttack = pBattleField->pBattleParty->monsters[3].attack;
+    break;
+  case WIND:
+    partyAttack = pBattleField->pBattleParty->monsters[1].attack;
+    break;
+  case EARTH:
+    partyAttack = pBattleField->pBattleParty->monsters[2].attack;
+    break;
+  default:
+    break;
+  }
+
+  double element_Boost = ELEMENT_BOOST[pBanishInfo->type][pBattleField->pBattleMonster->element];
+  double attackDamage = (partyAttack - pBattleField->pBattleMonster->defense) * element_Boost *(pow(1.5, pBanishInfo->contNum -3));
+  int a = blurDamage(attackDamage);
+  if (a <= 0)
+  {
+    return 1;
+  }
+  else
+  {
+    return a;
+  }
+}
+
+//敵モンスターによる攻撃ダメージを算出する関数
+int calcEnemyDamage(Monster* pMonster, Party* pParty){
+  double enemyDamage = pMonster->attack - pParty->averageDefense;
+  int e = blurDamage(enemyDamage);
+    if (e <= 0)
+  {
+    return 1;
+  }
+  else
+  {
+    return e;
   }
 }
