@@ -8,6 +8,7 @@
 #include <string.h>
 #include <math.h>
 
+
 /*** 列挙型宣言 ***/
 //属性を0~5まで割り当てる
 typedef enum {FIRE, WATER, WIND, EARTH, LIFE, EMPTY} Element;
@@ -77,17 +78,18 @@ int doBattle(Monster* pMonster, Party* pParty);
 Party organizeParty(Monster* monsters, int monsterNum, char* playerName);
 void showParty(Party* pParty);
 void onPlayerTurn(Battle_Field* pBattleField);
-void doAttack(Battle_Field* pBattleField, BanishInfo* pBanishInfo);
+void doAttack(Battle_Field* pBattleField, BanishInfo* pBanishInfo, int combo);
 void onEnemyTurn(Monster* pMonster, Party* pParty);
 void doEnemyAttack(Monster* pMonster, Party* pParty);
 void showBattleField(Battle_Field* pBattleFiled);
 bool checkValidCommand(char* commands);
 void evaluateGems(Battle_Field* pBattleField);
 BanishInfo checkBanishable(Element* elements);
-void banishGems(Battle_Field* pBattleField, BanishInfo* pBanishInfo);
+void banishGems(Battle_Field* pBattleField, BanishInfo* pBanishInfo, int combo);
 void shiftGems(BanishInfo* pBanishInfo, Element* elements);
-void spawnGems(Element* elements);
-void doRecover(Battle_Field* pBattleField, BanishInfo* pBanishInfo);
+void spawnGems(Battle_Field* pBattleField, int combo);
+void doRecover(Battle_Field* pBattleField, BanishInfo* pBanishInfo, int combo);
+void printCombo(int combo);
 
 //ユーティリティ関数
 void printMonsterName(Monster* pMonster);
@@ -246,13 +248,15 @@ void onPlayerTurn(Battle_Field* pBattleFiled){
     //適切なコマンドかどうかをチェックする
   } while (checkValidCommand(command) == false);
 
-  //宝石を移動させた上で「宝石スロットの評価」を機能させる
+  //宝石を移動させる
   moveGem(command[0] - 'A', command[1] - 'A', pBattleFiled->gems, true);
+
+  //宝石スロットを評価する
   evaluateGems(pBattleFiled);
 }
 
 //敵に攻撃を加える関数
-void doAttack(Battle_Field* pBattleField, BanishInfo* pBanishInfo){
+void doAttack(Battle_Field* pBattleField, BanishInfo* pBanishInfo, int combo){
 
   Monster* attackMonster;
   switch (pBanishInfo->type)
@@ -274,16 +278,25 @@ void doAttack(Battle_Field* pBattleField, BanishInfo* pBanishInfo){
   }
 
   int partyDamage = calcAttackDamage(pBattleField, attackMonster, pBanishInfo);
-  printf("%sの攻撃！？\n", attackMonster->name);
+  if (combo >= 2)
+  {
+    printf("%sの攻撃！", attackMonster->name);
+    printCombo(combo);
+  } else
+  {
+    printf("%sの攻撃！\n", attackMonster->name);
+  }
   printf("%sに%dのダメージ！\n", pBattleField->pBattleMonster->name, partyDamage);
   pBattleField->pBattleMonster->hp -= partyDamage;
 }
 
+//敵のターン
 void onEnemyTurn(Monster* pMonster, Party* pParty){
   printf("\n【%sのターン】\n", pMonster->name);
   doEnemyAttack(pMonster, pParty);
 }
 
+//敵モンスターの攻撃
 void doEnemyAttack(Monster* pMonster, Party* pParty){
   int enemyAttack = calcEnemyDamage(pMonster, pParty);
   printMonsterName(pMonster);
@@ -291,6 +304,7 @@ void doEnemyAttack(Monster* pMonster, Party* pParty){
   pParty->hp -= enemyAttack;
 }
 
+//バトルフィールド情報を表示
 void showBattleField(Battle_Field* pBattleField){
   printf("---------------------------------------\n\n");
   printf("       ");
@@ -334,18 +348,22 @@ bool checkValidCommand(char* commands){
   return true;
 }
 
+//宝石スロットを評価解決する
 void evaluateGems(Battle_Field* pBattleField){
   BanishInfo banishInfo = checkBanishable(pBattleField->gems);
-
+  int comboCount = 0;
   //消去可能箇所がある場合
-  if (banishInfo.contNum != 0)
+  while (banishInfo.contNum != 0)
   {
-    banishGems(pBattleField, &banishInfo);
+    comboCount++;
+    banishGems(pBattleField, &banishInfo, comboCount);
     shiftGems(&banishInfo, pBattleField->gems);
-    spawnGems(pBattleField->gems);
+    banishInfo = checkBanishable(pBattleField->gems);
   }
+  spawnGems(pBattleField, comboCount);
 }
 
+//宝石の消滅可能箇所判定
 BanishInfo checkBanishable(Element* elements){
   const int BANISH_GEMS = 3; ////消滅に必要な連続数
 
@@ -378,29 +396,31 @@ BanishInfo checkBanishable(Element* elements){
   return notFound;
 }
 
-void banishGems(Battle_Field* pBattleField, BanishInfo* pBanishInfo)
+//指定箇所の宝石を消滅させ効果発動
+void banishGems(Battle_Field* pBattleField, BanishInfo* pBanishInfo, int combo)
 {
+  //宝石の消滅→空きスロットの表示
   for (int i = 0; i < pBanishInfo->contNum; i++)
   {
     pBattleField->gems[pBanishInfo->position + i] = EMPTY;
   }
   printGems(pBattleField->gems);
 
-  //パーティ攻撃か回復か？
+  //効果発動→パーティ攻撃か回復か？
   if (pBanishInfo->type == LIFE)
   {
-    doRecover(pBattleField, pBanishInfo);
+    doRecover(pBattleField, pBanishInfo, combo);
   }
   else
   {
-    doAttack(pBattleField, pBanishInfo);
+    doAttack(pBattleField, pBanishInfo, combo);
   }
-
 
   //パーティ攻撃後の宝石スロットの表示
   printGems(pBattleField->gems);
 }
 
+//空いている部分を左詰していく
 void shiftGems(BanishInfo* pBanishInfo, Element* elements){
   int endEmpPos = pBanishInfo->position + pBanishInfo->contNum -1;
 
@@ -411,15 +431,43 @@ void shiftGems(BanishInfo* pBanishInfo, Element* elements){
   }
 }
 
-void spawnGems(Element* elements){
-  fillGems(elements, true);
-  printGems(elements);
+//空き領域に宝石が沸く
+void spawnGems(Battle_Field* pBattleField, int combo){
+  fillGems(pBattleField->gems, true);
+  printGems(pBattleField->gems);
+
+  //ランダム発生した宝石が消滅の可能性があるかどうか吟味
+  BanishInfo banishInfo = checkBanishable(pBattleField->gems);
+  if (banishInfo.contNum != 0)
+  {
+    combo++;
+    banishGems(pBattleField, &banishInfo, combo);
+    shiftGems(&banishInfo, pBattleField->gems);
+    banishInfo = checkBanishable(pBattleField->gems);
+    spawnGems(pBattleField, combo);
+  }
 }
 
-void doRecover(Battle_Field* pBattleField, BanishInfo* pBanishInfo){
+//宝石の消滅による回復
+void doRecover(Battle_Field* pBattleField, BanishInfo* pBanishInfo, int combo){
+  if (combo >= 2)
+  {
+    printf("%sは命の宝石を使った！", pBattleField->pBattleParty->player);
+    printCombo(combo);
+  } else
+  {
+    printf("%sは命の宝石を使った！\n", pBattleField->pBattleParty->player);
+  }
+
+
   pBattleField->pBattleParty->hp += calcRecoverDamage(pBanishInfo);
+  printf("HPが%d回復した\n", calcRecoverDamage(pBanishInfo));
 }
 
+//コンボ発生時にその旨を表示する関数
+void printCombo(int combo){
+  printf(" \x1b[47m\x1b[30m%d COMBO!\x1b[39m\x1b[49m\n", combo);
+}
 /*** ユーティリティ関数宣言 ***/
 
 //モンスターの名前に適切な記号と属性の色を付与し、画面に表示する関数
@@ -451,6 +499,7 @@ void printGems(Element* elements){
   printf("\n");
 }
 
+//1個の宝石の表示
 void printGem(char gem){
   char symbol = ELEMENT_SYMBOLS[gem];
   int color = ELEMENT_COLORS[gem];
