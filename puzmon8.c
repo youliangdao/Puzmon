@@ -98,7 +98,7 @@ void moveGem(int start, int end, Element* elements, bool printProcess);
 void swapGem(int std, Element* elements, bool dir);
 int calcRecoverDamage(BanishInfo* pBanishInfo);
 int blurDamage(double damage);
-int calcAttackDamage(Battle_Field* pBattleField, BanishInfo* pBanishInfo);
+int calcAttackDamage(Battle_Field* pBattleField, Monster* pAttackMonster, BanishInfo* pBanishInfo);
 int calcEnemyDamage(Monster* pMonster, Party* pParty);
 
 /*** 関数宣言 ***/
@@ -253,28 +253,28 @@ void onPlayerTurn(Battle_Field* pBattleFiled){
 
 //敵に攻撃を加える関数
 void doAttack(Battle_Field* pBattleField, BanishInfo* pBanishInfo){
-  int partyDamage = calcAttackDamage(pBattleField, pBanishInfo);
 
-  Monster* pAttackMonster;
+  Monster* attackMonster;
   switch (pBanishInfo->type)
   {
   case FIRE:
-    pAttackMonster = &pBattleField->pBattleParty->monsters[0];
+    attackMonster = &pBattleField->pBattleParty->monsters[0];
     break;
   case WATER:
-    pAttackMonster = &pBattleField->pBattleParty->monsters[3];
+    attackMonster = &pBattleField->pBattleParty->monsters[3];
     break;
   case WIND:
-    pAttackMonster = &pBattleField->pBattleParty->monsters[1];
+    attackMonster = &pBattleField->pBattleParty->monsters[1];
     break;
   case EARTH:
-    pAttackMonster = &pBattleField->pBattleParty->monsters[2];
+    attackMonster = &pBattleField->pBattleParty->monsters[2];
     break;
   default:
     break;
   }
 
-  printf("%sの攻撃！？\n", pAttackMonster->name);
+  int partyDamage = calcAttackDamage(pBattleField, attackMonster, pBanishInfo);
+  printf("%sの攻撃！？\n", attackMonster->name);
   printf("%sに%dのダメージ！\n", pBattleField->pBattleMonster->name, partyDamage);
   pBattleField->pBattleMonster->hp -= partyDamage;
 }
@@ -287,7 +287,7 @@ void onEnemyTurn(Monster* pMonster, Party* pParty){
 void doEnemyAttack(Monster* pMonster, Party* pParty){
   int enemyAttack = calcEnemyDamage(pMonster, pParty);
   printMonsterName(pMonster);
-  printf("の攻撃！%dのダメージを受けた\n", enemyAttack);
+  printf("の攻撃！%dのダメージを受けた\n\n\n", enemyAttack);
   pParty->hp -= enemyAttack;
 }
 
@@ -417,7 +417,6 @@ void spawnGems(Element* elements){
 }
 
 void doRecover(Battle_Field* pBattleField, BanishInfo* pBanishInfo){
-  printf("回復処理を行う\n");
   pBattleField->pBattleParty->hp += calcRecoverDamage(pBanishInfo);
 }
 
@@ -509,28 +508,10 @@ int blurDamage(double damage){
 }
 
 //パーティーによる攻撃ダメージを算出する関数
-int calcAttackDamage(Battle_Field* pBattleField, BanishInfo* pBanishInfo){
-  int partyAttack;
-  switch (pBanishInfo->type)
-  {
-  case FIRE:
-    partyAttack = pBattleField->pBattleParty->monsters[0].attack;
-    break;
-  case WATER:
-    partyAttack = pBattleField->pBattleParty->monsters[3].attack;
-    break;
-  case WIND:
-    partyAttack = pBattleField->pBattleParty->monsters[1].attack;
-    break;
-  case EARTH:
-    partyAttack = pBattleField->pBattleParty->monsters[2].attack;
-    break;
-  default:
-    break;
-  }
-
-  double element_Boost = ELEMENT_BOOST[pBanishInfo->type][pBattleField->pBattleMonster->element];
-  double attackDamage = (partyAttack - pBattleField->pBattleMonster->defense) * element_Boost *(pow(1.5, pBanishInfo->contNum -3));
+int calcAttackDamage(Battle_Field* pBattleField, Monster* pAttackMonster, BanishInfo* pBanishInfo){
+  double element_Boost = ELEMENT_BOOST[pBanishInfo->type][pAttackMonster->element];
+  double attackDamage = (pAttackMonster->attack - pBattleField->pBattleMonster->defense)
+   * element_Boost *(pow(1.5, pBanishInfo->contNum -3));
   int a = blurDamage(attackDamage);
   if (a <= 0)
   {
